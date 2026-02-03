@@ -1,0 +1,157 @@
+using UnityEngine;
+using System.Collections.Generic;
+using UnityEngine.SceneManagement;
+using Unity.Cinemachine;
+using UnityEngine.EventSystems;
+using System;
+
+public class GameManager : MonoBehaviour
+{
+    public static GameManager Instance { get; private set; }
+    private static int LevelNumber = 1;
+    private static int totalScore = 0;
+    public static void ResetStaticData()
+    {
+        LevelNumber = 1;
+        totalScore = 0;
+    }
+    public event EventHandler OnGamePaused;
+    public event EventHandler OnGameUnPaused;
+    [SerializeField] private List<GameLevel> gameLevelList;
+    [SerializeField] private CinemachineCamera cinemachineCamera;
+    private int score;
+    private float time;
+    private bool isTimerActive;
+    private void Awake()
+    {
+        Instance = this;
+    }
+    private void Start()
+    {
+        lander.Instance.OnCoinPickup += Lander_OnCoinPickup;
+        lander.Instance.OnLanded += Lander_OnLanded;
+        lander.Instance.OnStateChanged += Lander_OnStateChanged;
+
+        GameInput.Instance.OnMenuButtonPressed += GameInput_OnMenuButtonPressed;
+        LoadCurrentLevel();
+    }
+    private void GameInput_OnMenuButtonPressed(object sender, System.EventArgs e)
+    {
+        PauseUnpauseGame();
+    }
+    private void Lander_OnStateChanged(object sender, lander.OnStateChangedEventArgs e)
+    {
+        isTimerActive = e.state == lander.State.Normal;
+        if (e.state == lander.State.Normal)
+        {
+            cinemachineCamera.Target.TrackingTarget = lander.Instance.transform;
+            CinemachineCameraZoom2D.Instance.SetNormalOrthographicSize();
+        }
+    }
+    private void Update()
+    {
+        if (isTimerActive)
+        {
+            time += Time.deltaTime;
+        }
+    }
+
+    private void LoadCurrentLevel()
+    {
+        GameLevel gameLevel = GetGameLevel();
+        GameLevel spawnedGameLevel = Instantiate(gameLevel, Vector3.zero, Quaternion.identity);
+        lander.Instance.transform.position = spawnedGameLevel.GetLanderStartPosition();
+        cinemachineCamera.Target.TrackingTarget = spawnedGameLevel.GetCameraStartTargetTransform();
+        CinemachineCameraZoom2D.Instance.SetTargetOrthographicSize(spawnedGameLevel.GetZoomedOutOrthographicSize());
+    }
+
+    private GameLevel GetGameLevel()
+    {
+        foreach (GameLevel gameLevel in gameLevelList)
+        {
+            if (gameLevel.GetLevelNumber() == LevelNumber)
+            {
+                return gameLevel;
+            }
+        }
+        return null;
+    }
+
+    private void Lander_OnLanded(object sender, lander.OnLandedEventArgs e)
+    {
+        AddScore(e.score);
+    }
+    private void Lander_OnCoinPickup(object sender, System.EventArgs e)
+    {
+        AddScore(500);
+    }
+
+    public void AddScore(int addScoreAmount)
+    {
+        score += addScoreAmount;
+        Debug.Log(score);
+    }
+    public int GetScore()
+    {
+        return score;
+    }
+
+    public float GetTime()
+    {
+        return time;
+    }
+
+    public int GetTotalScore()
+    {
+        return totalScore; 
+    }
+
+    public void GoToNextLevel()
+    {
+        LevelNumber++;
+        totalScore += score;
+        if(GetGameLevel() == null) //No more levels
+        {
+            SceneLoader.LoadScene(SceneLoader.Scene.GameOverScene);
+        }
+        else //We still have more levels
+        {
+            SceneLoader.LoadScene(SceneLoader.Scene.GameScene);
+        }
+    }
+
+    public void RetryLevel()
+    {
+        SceneLoader.LoadScene(SceneLoader.Scene.GameScene);
+    }
+
+    public int GetLevelNumber()
+    {
+        return LevelNumber; 
+    }
+
+    public void PauseUnpauseGame()
+    {
+        if (Time.timeScale == 1f)
+        {
+            PauseGame();
+        }
+        else
+        {
+            UnPauseGame();
+        }
+    }
+
+    public void PauseGame()
+    {
+        Time.timeScale = 0f;
+        OnGamePaused?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void UnPauseGame()
+    {
+        Time.timeScale = 1f; 
+        OnGameUnPaused?.Invoke(this, EventArgs.Empty);
+    }
+
+}
